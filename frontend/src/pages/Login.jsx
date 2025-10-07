@@ -12,19 +12,19 @@ export default function Login() {
   const [error, setError] = useState("");
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    setError(""); // Clear any previous error
+  setForm({ ...form, [e.target.name]: e.target.value });
+  // Only clear error if user starts typing after an error is shown
+  if (error) setError("");
   };
 
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    console.log('Submitting login', form);
     try {
       setIsLoading(true);
       setError(""); // Clear previous errors
-      
       // Client-side validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(form.email)) {
@@ -32,18 +32,16 @@ export default function Login() {
         setIsLoading(false);
         return;
       }
-
       if (!form.password.trim()) {
         setError("Password is required");
         setIsLoading(false);
         return;
       }
-
       const response = await authService.login({
         email: form.email.trim().toLowerCase(),
         password: form.password
       });
-
+      console.log('Login response:', response);
       if (response.success) {
         setError(""); // Clear any existing errors
         // Get user role from response or localStorage
@@ -66,7 +64,7 @@ export default function Login() {
         // Handle different types of errors
         const errorMsg = response.message;
         setError(errorMsg); // Set error immediately
-
+        console.log('Login error message:', errorMsg);
         if (errorMsg.toLowerCase().includes('password')) {
           // Password-specific error handling
           setForm(prev => ({ ...prev, password: '' })); // Clear password field
@@ -74,10 +72,9 @@ export default function Login() {
           if (passwordInput) {
             passwordInput.focus(); // Focus password field
           }
-          
           toast.error(errorMsg, {
             position: "top-center",
-            autoClose: false, // Keep it visible
+            autoClose: false, // Keep it visible until user closes
             closeOnClick: true,
             pauseOnHover: true,
             draggable: true,
@@ -97,11 +94,10 @@ export default function Login() {
         error.response?.data?.message ||
         error.message ||
         "An error occurred during login";
-      
       setError(errorMsg);
       toast.error(errorMsg, {
         position: "top-right",
-        autoClose: 5000
+        autoClose: false // Error toast stays until user closes
       });
     } finally {
       setIsLoading(false);
@@ -116,8 +112,12 @@ export default function Login() {
         <div className="auth-form-full">
           <h1 className="auth-heading">Welcome Back</h1>
           <p className="auth-sub">Sign in to continue</p>
-          
           {/* Error Display */}
+          {error && (
+            <div className="error-message" style={{ color: 'red', marginBottom: '1rem' }}>
+              {error}
+            </div>
+          )}
           {error && (
             <div 
               style={{

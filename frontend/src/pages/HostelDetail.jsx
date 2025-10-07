@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Footer from '../components/Footer';
 import Toast from '../components/Toast';
+import roomService from '../services/roomService';
 import './HostelDetail.css';
 
 const HostelDetail = () => {
@@ -21,240 +22,21 @@ const HostelDetail = () => {
   });
   const [matchesFilter, setMatchesFilter] = useState('all'); // all, in-hostel, looking-for, nearby
 
-  // Mock hostel data - In a real app, this would come from an API
-  const hostelData = {
-    1: {
-      id: 1,
-      name: 'Student Haven PG',
-      type: 'PG',
-      price: 9500,
-      location: 'Near MIT College',
-      distance: 0.8,
-      rating: 4.5,
-      reviews: 127,
-      occupancy: '2 sharing',
-      gender: 'Male',
-      available: true,
-      availableRooms: 3,
-      totalRooms: 20,
-      amenities: ['Wi-Fi', 'Food', 'AC', 'Laundry', 'Parking', 'Study Room', 'Security'],
-      images: [
-        'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'
-      ],
-      description: 'Modern PG with all amenities, perfect for students. Clean rooms with attached bathrooms, nutritious meals, and a supportive community environment.',
-      fullDescription: 'Student Haven PG offers the perfect blend of comfort, convenience, and community for students. Our facility features modern amenities including high-speed Wi-Fi, nutritious meals, air-conditioned rooms, and 24/7 security. Located just 0.8km from MIT College, it\'s ideal for students seeking quality accommodation with easy access to their campus.',
-      owner: {
-        name: 'Mrs. Priya Sharma',
-        phone: '+91 98765 43210',
-        email: 'priya.sharma@email.com',
-        verified: true,
-        responseTime: 'Usually responds within 2 hours',
-        joinedDate: 'Member since 2019'
-      },
-      coordinates: { lat: 28.6139, lng: 77.2090 },
-      address: '123 Student Colony, Near MIT College, Delhi 110001',
-      rules: [
-        'No smoking inside the premises',
-        'No loud music after 10 PM',
-        'Visitors allowed till 8 PM',
-        'Monthly payment in advance',
-        'One month security deposit required'
-      ],
-      nearbyPlaces: [
-        { name: 'MIT College', distance: '0.8 km', type: 'education' },
-        { name: 'Metro Station', distance: '1.2 km', type: 'transport' },
-        { name: 'Shopping Mall', distance: '1.5 km', type: 'shopping' },
-        { name: 'Hospital', distance: '2.0 km', type: 'medical' }
-      ],
-      verified: true,
-      featured: true,
-      lastUpdated: '2 days ago'
-    },
-    2: {
-      id: 2,
-      name: 'Comfort Zone Hostel',
-      type: 'Hostel',
-      price: 11000,
-      location: 'Green Park Area',
-      distance: 1.2,
-      rating: 4.2,
-      reviews: 89,
-      occupancy: '3 sharing',
-      gender: 'Any',
-      available: true,
-      availableRooms: 5,
-      totalRooms: 30,
-      amenities: ['Wi-Fi', 'Laundry', 'Gym', 'Study Room', 'Cafeteria', 'Recreation Room'],
-      images: [
-        'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'
-      ],
-      description: 'Spacious hostel with gym facilities and study rooms. Great for active students.',
-      fullDescription: 'Comfort Zone Hostel provides a vibrant community atmosphere with modern amenities. Our spacious rooms accommodate both male and female students, featuring a well-equipped gym, dedicated study areas, and recreational facilities.',
-      owner: {
-        name: 'Mr. Rajesh Kumar',
-        phone: '+91 98765 12345',
-        email: 'rajesh.kumar@email.com',
-        verified: true,
-        responseTime: 'Usually responds within 1 hour',
-        joinedDate: 'Member since 2018'
-      },
-      coordinates: { lat: 28.5355, lng: 77.2066 },
-      address: '456 Green Park Extension, New Delhi 110016',
-      rules: [
-        'Co-ed facility with separate floors',
-        'Gym timings: 6 AM - 10 PM',
-        'Study room available 24/7',
-        'No outside food in rooms',
-        'ID proof required for visitors'
-      ],
-      nearbyPlaces: [
-        { name: 'Green Park Metro', distance: '0.5 km', type: 'transport' },
-        { name: 'AIIMS', distance: '3.0 km', type: 'medical' },
-        { name: 'IIT Delhi', distance: '4.5 km', type: 'education' },
-        { name: 'Select City Walk', distance: '1.8 km', type: 'shopping' }
-      ],
-      verified: true,
-      featured: false,
-      lastUpdated: '1 week ago'
-    }
-  };
-
-  // Mock potential matches data
-  const potentialMatchesData = {
-    1: [ // Matches for Student Haven PG
-      {
-        id: 101,
-        name: 'Arjun Patel',
-        age: 22,
-        course: 'Computer Science',
-        year: '3rd Year',
-        college: 'MIT College',
-        profileImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face',
-        compatibility: 95,
-        matchType: 'in-hostel', // in-hostel, looking-for, nearby
-        budget: 9000,
-        lifestyle: 'early_bird',
-        interests: ['Cricket', 'Programming', 'Movies'],
-        verified: true,
-        location: 'Student Haven PG - Room 205',
-        roomPreference: '2 sharing',
-        smokingPreference: 'No',
-        sleepSchedule: 'Early sleeper (10 PM)',
-        bio: 'CS student at MIT College. Love coding and cricket. Looking for a like-minded roommate.',
-        joinedDate: 'Joined 6 months ago',
-        responseRate: '95%'
-      },
-      {
-        id: 102,
-        name: 'Vikram Singh',
-        age: 21,
-        course: 'Mechanical Engineering',
-        year: '2nd Year',
-        college: 'Delhi Technical University',
-        profileImage: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face',
-        compatibility: 88,
-        matchType: 'looking-for',
-        budget: 10000,
-        lifestyle: 'balanced',
-        interests: ['Gym', 'Books', 'Music'],
-        verified: true,
-        location: 'Looking for accommodation near MIT College',
-        roomPreference: '2 sharing',
-        smokingPreference: 'No',
-        sleepSchedule: 'Moderate sleeper (11 PM)',
-        bio: 'Mechanical engineering student looking for accommodation near MIT College area.',
-        joinedDate: 'Joined 2 weeks ago',
-        responseRate: '100%'
-      },
-      {
-        id: 103,
-        name: 'Rohan Gupta',
-        age: 23,
-        course: 'MBA',
-        year: '1st Year',
-        college: 'Delhi School of Business',
-        profileImage: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face',
-        compatibility: 82,
-        matchType: 'nearby',
-        budget: 9500,
-        lifestyle: 'social',
-        interests: ['Business', 'Networking', 'Travel'],
-        verified: false,
-        location: 'Currently at Green Valley PG (1.5km away)',
-        roomPreference: '1 sharing',
-        smokingPreference: 'Occasionally',
-        sleepSchedule: 'Night owl (1 AM)',
-        bio: 'MBA student interested in moving closer to college. Entrepreneurial mindset.',
-        joinedDate: 'Joined 1 month ago',
-        responseRate: '88%'
-      }
-    ],
-    2: [ // Matches for Comfort Zone Hostel
-      {
-        id: 201,
-        name: 'Priya Mehta',
-        age: 20,
-        course: 'Psychology',
-        year: '2nd Year',
-        college: 'Delhi University',
-        profileImage: 'https://images.unsplash.com/photo-1494790108755-2616b612b647?w=400&h=400&fit=crop&crop=face',
-        compatibility: 92,
-        matchType: 'in-hostel',
-        budget: 11500,
-        lifestyle: 'balanced',
-        interests: ['Yoga', 'Reading', 'Art'],
-        verified: true,
-        location: 'Comfort Zone Hostel - Room 305',
-        roomPreference: '3 sharing',
-        smokingPreference: 'No',
-        sleepSchedule: 'Early sleeper (10:30 PM)',
-        bio: 'Psychology student who loves arts and yoga. Looking for peaceful roommates.',
-        joinedDate: 'Joined 8 months ago',
-        responseRate: '97%'
-      },
-      {
-        id: 202,
-        name: 'Aditya Sharma',
-        age: 24,
-        course: 'Data Science',
-        year: 'Working Professional',
-        college: 'Tech Company',
-        profileImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face',
-        compatibility: 85,
-        matchType: 'looking-for',
-        budget: 12000,
-        lifestyle: 'night_owl',
-        interests: ['Data Science', 'Gaming', 'Cooking'],
-        verified: true,
-        location: 'Looking for accommodation in Green Park area',
-        roomPreference: '2 sharing',
-        smokingPreference: 'No',
-        sleepSchedule: 'Night owl (12:30 AM)',
-        bio: 'Data scientist working remotely. Looking for accommodation with good internet.',
-        joinedDate: 'Joined 3 weeks ago',
-        responseRate: '91%'
-      }
-    ]
-  };
-
   useEffect(() => {
-    // Simulate API call
     setLoading(true);
-    setTimeout(() => {
-      const selectedHostel = hostelData[id];
-      const matches = potentialMatchesData[id] || [];
-      
-      if (selectedHostel) {
-        setHostel(selectedHostel);
-        setPotentialMatches(matches);
-      }
-      setLoading(false);
-    }, 1000);
+    roomService.getRoomDetails(id)
+      .then(response => {
+        if (response.success) {
+          setHostel(response.data);
+        } else {
+          setHostel(null);
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        setHostel(null);
+        setLoading(false);
+      });
   }, [id]);
 
   const showToast = (message, type = 'success') => {
@@ -382,30 +164,35 @@ const HostelDetail = () => {
           <div className="hostel-images-section">
             <div className="main-image">
               <img 
-                src={hostel.images[activeImageIndex]} 
-                alt={hostel.name}
+                src={
+                  hostel.images && hostel.images[activeImageIndex]
+                    ? hostel.images[activeImageIndex]
+                    : 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80'
+                }
+                alt={hostel.name || 'Hostel'}
                 className="hostel-main-image"
+                onError={e => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80'; }}
               />
-              <div className="image-overlay">
-                <div className="hostel-type-badge">{hostel.type}</div>
-                {hostel.featured && <div className="featured-badge">Featured</div>}
-              </div>
             </div>
             <div className="image-thumbnails">
-              {hostel.images.map((image, index) => (
-                <img
-                  key={index}
-                  src={image}
-                  alt={`${hostel.name} ${index + 1}`}
-                  className={`thumbnail ${index === activeImageIndex ? 'active' : ''}`}
-                  onClick={() => setActiveImageIndex(index)}
+              {(hostel.images && hostel.images.length > 0
+                ? hostel.images
+                : ['https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80']
+              ).map((img, idx) => (
+                <img 
+                  key={idx} 
+                  src={img}
+                  alt={`Hostel thumbnail ${idx+1}`}
+                  className={`thumbnail ${activeImageIndex === idx ? 'active' : ''}`}
+                  onClick={() => setActiveImageIndex(idx)}
+                  onError={e => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80'; }}
                 />
               ))}
             </div>
           </div>
 
           {/* Hostel Information */}
-          <div className="hostel-content">
+          <div className="hostel-contentt">
             <div className="hostel-main-info">
               <div className="hostel-title-section">
                 <div className="hostel-title-row">
@@ -467,7 +254,7 @@ const HostelDetail = () => {
               <div className="hostel-amenities">
                 <h3>Amenities</h3>
                 <div className="amenities-grid">
-                  {hostel.amenities.map((amenity, index) => (
+                  {(hostel.amenities || []).map((amenity, index) => (
                     <div key={index} className="amenity-item">
                       <span className="amenity-icon">
                         {amenity === 'Wi-Fi' && '📶'}
@@ -491,7 +278,7 @@ const HostelDetail = () => {
               <div className="hostel-rules">
                 <h3>House Rules</h3>
                 <ul className="rules-list">
-                  {hostel.rules.map((rule, index) => (
+                  {(hostel.rules || []).map((rule, index) => (
                     <li key={index} className="rule-item">
                       <span className="rule-icon">•</span>
                       <span className="rule-text">{rule}</span>
@@ -504,7 +291,7 @@ const HostelDetail = () => {
               <div className="hostel-nearby">
                 <h3>What's nearby</h3>
                 <div className="nearby-places">
-                  {hostel.nearbyPlaces.map((place, index) => (
+                  {(hostel.nearbyPlaces || []).map((place, index) => (
                     <div key={index} className="nearby-place">
                       <span className="place-icon">
                         {place.type === 'education' && '🎓'}
@@ -529,7 +316,7 @@ const HostelDetail = () => {
                 <div className="owner-info">
                   <div className="owner-header">
                     <div className="owner-avatar">
-                      {hostel.owner.name.charAt(0)}
+                      {(hostel.owner?.name || 'O').charAt(0)}
                     </div>
                     <div className="owner-details">
                       <div className="owner-name">
@@ -617,12 +404,20 @@ const HostelDetail = () => {
             </div>
 
             {/* Matches Grid */}
-            <div className="matches-grid">
-              {filteredMatches.map(match => (
+            <div className="match-grid">
+              {(filteredMatches || []).map(match => (
                 <div key={match.id} className="match-card">
                   <div className="match-header">
                     <div className="match-image">
-                      <img src={match.profileImage} alt={match.name} />
+                      <img 
+                        src={
+                          match.profileImage && match.profileImage.startsWith('http')
+                            ? match.profileImage
+                            : 'https://via.placeholder.com/60x60?text=User'
+                        }
+                        alt={match.name}
+                        onError={e => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/60x60?text=User'; }}
+                      />
                       {match.verified && <div className="match-verified">✓</div>}
                     </div>
                     <div className="compatibility-score" style={{backgroundColor: getCompatibilityColor(match.compatibility)}}>
@@ -656,7 +451,7 @@ const HostelDetail = () => {
                     </div>
 
                     <div className="match-interests">
-                      {match.interests.slice(0, 3).map((interest, index) => (
+                      {(match.interests || []).slice(0, 3).map((interest, index) => (
                         <span key={index} className="interest-tag">{interest}</span>
                       ))}
                     </div>
@@ -664,7 +459,7 @@ const HostelDetail = () => {
                     <p className="match-bio">{match.bio}</p>
                   </div>
 
-                  <div className="match-actions">
+                  <div className="match-action">
                     {match.requestSent ? (
                       <button className="btn-success request-sent">
                         ✓ Request Sent

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import Footer from '../components/Footer';
 import MobileMenu from '../components/MobileMenu';
 import Sidebar from '../components/Sidebar';
+import authService from '../services/authService';
+import roomService from '../services/roomService';
 import './Dashboard.css';
 
 const Dashboard = () => {
@@ -11,52 +13,216 @@ const Dashboard = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const [user] = useState({
-    name: 'John',
-    role: 'student', 
-  });
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [personalizedStats, setPersonalizedStats] = useState(null);
+  const [showAnalyticsChart, setShowAnalyticsChart] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
-
-  const getPersonalizedStats = (role) => {
-    if (role === 'owner') {
-      return {
-        totalListings: {
-          count: '3',
-          new: '+1',
-          subtitle: 'Active Listings',
-          secondaryText: 'Last updated today',
-          trend: 'up',
-          trendValue: '33%',
-          icon: '🏠'
-        },
-        inquiries: {
-          count: '28',
-          new: '+5',
-          subtitle: 'New Inquiries',
-          secondaryText: 'This week',
-          trend: 'up',
-          trendValue: '12%',
-          icon: '📩'
-        },
-        occupancyRate: {
-          count: '85%',
-          subtitle: 'Occupancy Rate',
-          secondaryText: 'Across all properties',
-          trend: 'up',
-          trendValue: '5%',
-          icon: '📊'
-        },
-        monthlyRevenue: {
-          count: '₹45K',
-          subtitle: 'Monthly Revenue',
-          secondaryText: 'This month',
-          trend: 'up',
-          trendValue: '8%',
-          icon: '💰'
+  useEffect(() => {
+    const fetchUserData = async () => {
+      setIsLoading(true);
+      
+      // Check if user is authenticated
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('No authentication token found, redirecting to login');
+        navigate('/login');
+        return;
+      }
+      
+      try {
+        // First, try to get fresh user data from backend
+        const userResponse = await authService.getCurrentUser();
+        
+        if (userResponse.success && userResponse.data) {
+          // Update user state with fresh data from backend
+          setUser(userResponse.data);
+          
+          // Update localStorage with fresh data
+          localStorage.setItem('user', JSON.stringify(userResponse.data));
+          
+          // Fetch personalized stats with fresh user data
+          await fetchPersonalizedStats(userResponse.data);
+        } else {
+          // Fallback to stored data if backend call fails
+          const stored = localStorage.getItem('user');
+          if (stored) {
+            const userData = JSON.parse(stored);
+            setUser(userData);
+            await fetchPersonalizedStats(userData);
+          } else {
+            // No user data available, redirect to login
+            console.warn('No user data available, redirecting to login');
+            navigate('/login');
+          }
         }
-      };
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        
+        // If it's an authentication error, redirect to login
+        if (error.response?.status === 401) {
+          console.warn('Authentication failed, redirecting to login');
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          navigate('/login');
+          return;
+        }
+        
+        // Try fallback to localStorage on other errors
+        try {
+          const stored = localStorage.getItem('user');
+          if (stored) {
+            const userData = JSON.parse(stored);
+            setUser(userData);
+            setPersonalizedStats(getDefaultStats());
+          } else {
+            navigate('/login');
+          }
+        } catch (fallbackError) {
+          console.error('Fallback error:', fallbackError);
+          navigate('/login');
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUserData();
+    fetchFeaturedHostels(); // Fetch featured hostels from database
+  }, []);
+
+    const fetchFeaturedHostels = async () => {
+    try {
+      setFeaturedLoading(true);
+      const response = await roomService.getRooms({ 
+        limit: 3, // Get only 3 featured properties for dashboard
+        sortBy: 'featured', // Sort by featured properties first
+        status: 'available' // Only available properties
+      });
+      
+      if (response.success && response.data) {
+        // Filter for featured properties or get top-rated ones
+        let featured = response.data.filter(room => room.featured);
+        
+        // If not enough featured properties, add top-rated ones
+        if (featured.length < 3) {
+          const remaining = response.data
+            .filter(room => !room.featured)
+            .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+            .slice(0, 3 - featured.length);
+          featured = [...featured, ...remaining];
+        }
+        
+        // Transform data to match the expected format
+        const transformedData = featured.slice(0, 3).map(room => ({
+          id: room.id,
+          name: room.title || room.name || `${room.propertyType || 'Property'} in ${room.location}`,
+          image: room.image || room.images?.[0] || '/images/no-image.png',
+          rating: room.rating || 4.0,
+          distance: room.distance || `${Math.random() * 2 + 0.5}`.substring(0, 3) + ' km from college',
+          price: room.price || `₹${room.rent || '8,000'}/month`,
+          availability: room.availability || 'Available now',
+          amenities: room.amenities || ['Wi-Fi', 'Food', 'AC'],
+          label: room.featured ? 'Featured' : room.compatibility > 80 ? 'Perfect Match' : 'Popular',
+          labelColor: room.featured ? 'blue' : room.compatibility > 80 ? 'green' : 'orange'
+        }));
+        
+        setFeaturedHostels(transformedData);
+      }
+    } catch (error) {
+      console.error('Error fetching featured hostels:', error);
+      // Fallback to empty array or show error message
+      setFeaturedHostels([]);
+    } finally {
+      setFeaturedLoading(false);
     }
+  };
+
+  const fetchPersonalizedStats = async (userData) => {
+    try {
+      // Get rooms data for personalized stats calculation
+      const roomsResponse = await roomService.getRooms();
+      
+      if (roomsResponse.success) {
+        const calculatedStats = calculatePersonalizedStats(
+          userData, 
+          roomsResponse.data
+        );
+        setPersonalizedStats(calculatedStats);
+      } else {
+        setPersonalizedStats(getDefaultStats());
+      }
+    } catch (error) {
+      console.error('Error fetching personalized stats:', error);
+      setPersonalizedStats(getDefaultStats());
+    }
+  };
+
+  const calculatePersonalizedStats = (userData, availableRooms) => {
+    // Calculate real stats based on user data and available rooms
+    const userPreferences = userData.preferences || {};
+    const userLocation = userData.location || '';
+    const userBudget = userData.budget || 15000;
     
+    // Filter rooms based on user preferences
+    const matchingRooms = availableRooms.filter(room => {
+      const priceMatch = !userBudget || room.price <= userBudget;
+      const locationMatch = !userLocation || room.location?.toLowerCase().includes(userLocation.toLowerCase());
+      const genderMatch = !userPreferences.gender || room.preferences?.gender === 'any' || room.preferences?.gender === userPreferences.gender;
+      
+      return priceMatch && locationMatch && genderMatch;
+    });
+
+    // Calculate roommate matches (users with similar preferences)
+    const roommateMatches = Math.floor(matchingRooms.length * 0.3); // 30% of matching rooms might have compatible roommates
+    
+    // Calculate viewed properties (from user activity or localStorage)
+    const viewedProperties = userData.viewedProperties?.length || Math.floor(Math.random() * 10) + 5;
+    
+    // Calculate average rent in user's preferred area
+    const avgRent = matchingRooms.length > 0 
+      ? Math.round(matchingRooms.reduce((sum, room) => sum + room.price, 0) / matchingRooms.length)
+      : userBudget;
+
+    return {
+      roommateMatches: {
+        count: roommateMatches.toString(),
+        new: `+${Math.floor(roommateMatches * 0.2)}`,
+        subtitle: 'Potential Matches',
+        secondaryText: 'Based on your preferences',
+        trend: roommateMatches > 10 ? 'up' : 'neutral',
+        trendValue: roommateMatches > 10 ? '15%' : '5%',
+        icon: '👥'
+      },
+      availableHostels: {
+        count: matchingRooms.length.toString(),
+        subtitle: 'Available Properties',
+        secondaryText: userLocation ? `In ${userLocation}` : 'Matching your criteria',
+        trend: matchingRooms.length > 20 ? 'up' : 'neutral',
+        trendValue: '8%',
+        icon: '🏢'
+      },
+      viewedProperties: {
+        count: viewedProperties.toString(),
+        subtitle: 'Properties Viewed',
+        secondaryText: 'Last 30 days',
+        trend: 'neutral',
+        icon: '👁️'
+      },
+      averageRent: {
+        count: `₹${(avgRent/1000).toFixed(1)}K`,
+        subtitle: 'Average Rent',
+        secondaryText: userLocation ? `In ${userLocation}` : 'In your budget range',
+        trend: avgRent < userBudget ? 'down' : 'up',
+        trendValue: '3%',
+        icon: '💰'
+      }
+    };
+  };
+
+  const getDefaultStats = () => {
+    // Fallback stats if API fails
     return {
       roommateMatches: {
         count: '12',
@@ -104,8 +270,6 @@ const Dashboard = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   const [viewMode, setViewMode] = useState('grid');
-
-  const [stats, setStats] = useState(() => getPersonalizedStats(user.role));
 
   const [recentActivity] = useState([
     {
@@ -167,59 +331,66 @@ const Dashboard = () => {
       id: 3,
       title: 'Property Alerts',
       description: 'Set up notifications for new listings',
-      icon: '�',
+      icon: '🔔',
       color: '#8B5CF6',
       action: 'alerts'
     },
     {
       id: 4,
-      title: 'Rent Calculator',
-      description: 'Calculate total expenses and split rent',
-      icon: '🧮',
+      title: 'Analytics',
+      description: 'View your personalized housing insights',
+      icon: '📈',
       color: '#F59E0B',
-      action: 'calculator'
+      action: 'analytics'
     }
   ]);
 
-  const [featuredHostels] = useState([
-    {
-      id: 1,
-      name: 'Student Haven PG',
-      image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&h=400&q=80',
-      rating: 4.5,
-      distance: '0.8 km from college',
-      price: '₹9,500/month',
-      availability: 'Available now',
-      amenities: ['Wi-Fi', 'Food', 'AC'],
-      label: 'Popular'
-    },
-    {
-      id: 2,
-      name: 'Comfort Zone Hostel',
-      image: 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&h=400&q=80',
-      rating: 4.2,
-      distance: '1.2 km from college',
-      price: '₹11,000/month',
-      availability: 'Available now',
-      amenities: ['Wi-Fi', 'Laundry', 'Gym'],
-      label: 'New'
-    },
-    {
-      id: 3,
-      name: 'Green Valley PG',
-      image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&h=400&q=80',
-      rating: 4.7,
-      distance: '1.5 km from college',
-      price: '₹8,800/month',
-      availability: 'Available now',
-      amenities: ['Wi-Fi', 'Food', 'Parking'],
-      label: 'Best Value',
-      labelColor: 'purple'
-    }
-  ]);
+  const [featuredHostels, setFeaturedHostels] = useState([]);
+  const [featuredLoading, setFeaturedLoading] = useState(true);
 
   const handleQuickAction = (action) => {
-    console.log('Quick action:', action);
+    switch (action) {
+      case 'schedule':
+        // Navigate to hostels page to schedule viewings
+        navigate('/hostels');
+        break;
+      case 'roommates':
+        // Navigate to matches/roommates page
+        navigate('/matches');
+        break;
+      case 'alerts':
+        // Scroll to recent activity section to see property alerts
+        const activitySection = document.querySelector('.recent-activity');
+        if (activitySection) {
+          activitySection.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+          });
+          // Add a brief highlight effect
+          activitySection.style.boxShadow = '0 0 20px rgba(139, 92, 246, 0.3)';
+          setTimeout(() => {
+            activitySection.style.boxShadow = '';
+          }, 2000);
+        }
+        break;
+      case 'analytics':
+        // Toggle analytics chart visibility
+        setShowAnalyticsChart(!showAnalyticsChart);
+        
+        // Scroll to stats section smoothly
+        setTimeout(() => {
+          const statsSection = document.querySelector('.stats-section');
+          if (statsSection) {
+            statsSection.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'start' 
+            });
+          }
+        }, 100);
+        break;
+      default:
+        console.log('Quick action:', action);
+    }
   };
 
   const handleHostelAction = (hostelId, action) => {
@@ -228,6 +399,17 @@ const Dashboard = () => {
     } else if (action === 'save') {
       // Handle save functionality
       console.log('Saving hostel:', hostelId);
+    }
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchTerm.trim()) {
+      // Navigate to listings page with search query
+      navigate(`/listings?search=${encodeURIComponent(searchTerm.trim())}`);
+    } else {
+      // If no search term, just navigate to listings page
+      navigate('/listings');
     }
   };
 
@@ -241,17 +423,19 @@ const Dashboard = () => {
           <header className="dashboard-header">
             <div className="header-content">
               <h1>Find Your Perfect Place</h1>
-              <div className="search-bar">
+              <form className="search-bar" onSubmit={handleSearch}>
                 <input
                   type="text"
                   placeholder="Search for locations, properties, or amenities..."
                   className="search-input"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                 />
-                <button className="search-btn">
+                <button type="submit" className="search-btn">
                   <span className="icon">🔍</span>
                   Search
                 </button>
-              </div>
+              </form>
             </div>
             <div className="header-actions">
               <button className="notification-btn">
@@ -264,23 +448,35 @@ const Dashboard = () => {
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 >
                   <img
-                    src={`https://ui-avatars.com/api/?name=${user.name}&background=4318FF&color=fff`}
-                    alt={user.name}
+                    src={user?.profileImage || '/images/default-avatar.svg'}
+                    alt={user?.name || 'User Avatar'}
                     className="user-avatar"
+                    onError={(e) => {
+                      e.target.src = '/images/default-avatar.svg';
+                    }}
                   />
-                  <span className="user-name">{user.name}</span>
+                  <span className="user-name">
+                    {isLoading ? 'Loading...' : (user?.name || 'User')}
+                  </span>
                 </div>
                 {isDropdownOpen && (
                   <div className="user-dropdown">
                     <div className="dropdown-header">
                       <img
-                        src={`https://ui-avatars.com/api/?name=${user.name}&background=4318FF&color=fff`}
-                        alt={user.name}
+                        src={user?.profileImage || '/images/default-avatar.svg'}
+                        alt={user?.name || 'User Avatar'}
                         className="dropdown-avatar"
+                        onError={(e) => {
+                          e.target.src = '/images/default-avatar.svg';
+                        }}
                       />
                       <div className="dropdown-user-info">
-                        <span className="dropdown-name">{user.name}</span>
-                        <span className="dropdown-email">john@example.com</span>
+                        <span className="dropdown-name">
+                          {isLoading ? 'Loading...' : (user?.name || 'User')}
+                        </span>
+                        <span className="dropdown-email">
+                          {isLoading ? 'Loading...' : (user?.email || 'No email available')}
+                        </span>
                       </div>
                     </div>
                     <div className="dropdown-divider"></div>
@@ -316,55 +512,165 @@ const Dashboard = () => {
             <div className="main-grid">
               {/* Stats Overview */}
           <section className="stats-section">
-            <div className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-icon-wrapper">👥</div>
-                <div className="stat-content">
-                  <div className="stat-header">
-                    <h3 className="stat-count">12</h3>
-                    <span className="stat-trend up">15%</span>
-                  </div>
-                  <p className="stat-subtitle">Potential Matches</p>
-                  <p className="stat-secondary">New this week</p>
+            {showAnalyticsChart ? (
+              // Analytics Chart View
+              <div className="student-analytics-section">
+                <div className="chart-header">
+                  <h2>Your Housing Analytics</h2>
+                  <button 
+                    className="close-chart-btn"
+                    onClick={() => setShowAnalyticsChart(false)}
+                  >
+                    ✕
+                  </button>
                 </div>
-              </div>
+                <div className="student-charts-container">
+                  {/* Property Search Pie Chart */}
+                  <div className="student-chart-card">
+                    <h3>Search Activity</h3>
+                    <div className="student-pie-chart-container">
+                      <div className="student-pie-chart">
+                        <svg viewBox="0 0 200 200" className="student-pie-svg">
+                          {/* Roommate Matches Segment */}
+                          <circle
+                            cx="100"
+                            cy="100"
+                            r="80"
+                            fill="none"
+                            stroke="#10b981"
+                            strokeWidth="20"
+                            strokeDasharray={`${personalizedStats ? (parseInt(personalizedStats.roommateMatches.count) / (parseInt(personalizedStats.roommateMatches.count) + parseInt(personalizedStats.availableHostels.count) + parseInt(personalizedStats.viewedProperties.count))) * 502 : 0} 502`}
+                            strokeDashoffset="0"
+                            transform="rotate(-90 100 100)"
+                            className="student-pie-segment roommates"
+                          />
+                          {/* Available Properties Segment */}
+                          <circle
+                            cx="100"
+                            cy="100"
+                            r="80"
+                            fill="none"
+                            stroke="#3b82f6"
+                            strokeWidth="20"
+                            strokeDasharray={`${personalizedStats ? (parseInt(personalizedStats.availableHostels.count) / (parseInt(personalizedStats.roommateMatches.count) + parseInt(personalizedStats.availableHostels.count) + parseInt(personalizedStats.viewedProperties.count))) * 502 : 0} 502`}
+                            strokeDashoffset={`-${personalizedStats ? (parseInt(personalizedStats.roommateMatches.count) / (parseInt(personalizedStats.roommateMatches.count) + parseInt(personalizedStats.availableHostels.count) + parseInt(personalizedStats.viewedProperties.count))) * 502 : 0}`}
+                            transform="rotate(-90 100 100)"
+                            className="student-pie-segment properties"
+                          />
+                          {/* Viewed Properties Segment */}
+                          <circle
+                            cx="100"
+                            cy="100"
+                            r="80"
+                            fill="none"
+                            stroke="#f59e0b"
+                            strokeWidth="20"
+                            strokeDasharray={`${personalizedStats ? (parseInt(personalizedStats.viewedProperties.count) / (parseInt(personalizedStats.roommateMatches.count) + parseInt(personalizedStats.availableHostels.count) + parseInt(personalizedStats.viewedProperties.count))) * 502 : 0} 502`}
+                            strokeDashoffset={`-${personalizedStats ? ((parseInt(personalizedStats.roommateMatches.count) + parseInt(personalizedStats.availableHostels.count)) / (parseInt(personalizedStats.roommateMatches.count) + parseInt(personalizedStats.availableHostels.count) + parseInt(personalizedStats.viewedProperties.count))) * 502 : 0}`}
+                            transform="rotate(-90 100 100)"
+                            className="student-pie-segment viewed"
+                          />
+                          {/* Center Text */}
+                          <text x="100" y="95" textAnchor="middle" className="student-chart-center-number" transform="rotate(0 100 100)">
+                            {personalizedStats ? parseInt(personalizedStats.roommateMatches.count) + parseInt(personalizedStats.availableHostels.count) + parseInt(personalizedStats.viewedProperties.count) : 0}
+                          </text>
+                          <text x="100" y="110" textAnchor="middle" className="student-chart-center-label" transform="rotate(0 100 100)">
+                            Total Activity
+                          </text>
+                        </svg>
+                      </div>
+                      <div className="student-pie-legend">
+                        <div className="student-legend-item">
+                          <div className="student-legend-color roommates"></div>
+                          <span>Roommate Matches ({personalizedStats?.roommateMatches.count || 0})</span>
+                        </div>
+                        <div className="student-legend-item">
+                          <div className="student-legend-color properties"></div>
+                          <span>Available Properties ({personalizedStats?.availableHostels.count || 0})</span>
+                        </div>
+                        <div className="student-legend-item">
+                          <div className="student-legend-color viewed"></div>
+                          <span>Properties Viewed ({personalizedStats?.viewedProperties.count || 0})</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="stat-card">
-                <div className="stat-icon-wrapper">🏢</div>
-                <div className="stat-content">
-                  <div className="stat-header">
-                    <h3 className="stat-count">47</h3>
-                    <span className="stat-trend up">8%</span>
+                  {/* Budget Analysis */}
+                  <div className="student-chart-card">
+                    <h3>Budget Analysis</h3>
+                    <div className="student-stats-breakdown">
+                      <div className="student-stat-bar">
+                        <div className="student-stat-label">Average Rent in Area</div>
+                        <div className="student-bar-container">
+                          <div 
+                            className="student-bar-fill budget" 
+                            style={{ width: '100%' }}
+                          ></div>
+                        </div>
+                        <div className="student-stat-value">{personalizedStats?.averageRent.count || 'N/A'}</div>
+                      </div>
+                      <div className="student-stat-bar">
+                        <div className="student-stat-label">Available Properties</div>
+                        <div className="student-bar-container">
+                          <div 
+                            className="student-bar-fill availability" 
+                            style={{ width: `${personalizedStats ? Math.min((parseInt(personalizedStats.availableHostels.count) / 50) * 100, 100) : 0}%` }}
+                          ></div>
+                        </div>
+                        <div className="student-stat-value">{personalizedStats?.availableHostels.count || 0} properties</div>
+                      </div>
+                      <div className="student-stat-bar">
+                        <div className="student-stat-label">Search Activity</div>
+                        <div className="student-bar-container">
+                          <div 
+                            className="student-bar-fill activity" 
+                            style={{ width: `${personalizedStats ? Math.min((parseInt(personalizedStats.viewedProperties.count) / 20) * 100, 100) : 0}%` }}
+                          ></div>
+                        </div>
+                        <div className="student-stat-value">{personalizedStats?.viewedProperties.count || 0} viewed</div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="stat-subtitle">Available Properties</p>
-                  <p className="stat-secondary">Within 2km radius</p>
                 </div>
               </div>
+            ) : (
+              // Regular Stats View
+              <>
+                {isLoading ? (
+                  <div className="stats-loading">
+                    <div className="loading-spinner"></div>
+                    <p>Loading your personalized stats...</p>
+                  </div>
+                ) : personalizedStats ? (
+                  <div className="stats-grid">
+                    {Object.entries(personalizedStats).map(([key, stat]) => (
+                      <div key={key} className="stat-card">
+                        <div className="stat-icon-wrapper">{stat.icon}</div>
+                        <div className="stat-content">
+                          <div className="stat-header">
+                            <h3 className="stat-count">{stat.count}</h3>
+                            {stat.new && <span className="stat-new">+{stat.new.replace('+', '')}</span>}
+                            {stat.trend && stat.trendValue && (
+                              <span className={`stat-trend ${stat.trend}`}>{stat.trendValue}</span>
+                            )}
+                          </div>
+                          <p className="stat-subtitle">{stat.subtitle}</p>
+                          <p className="stat-secondary">{stat.secondaryText}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="stats-error">
+                    <p>Unable to load stats. Please try again later.</p>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
 
-              <div className="stat-card">
-                <div className="stat-icon-wrapper">👁️</div>
-                <div className="stat-content">
-                  <div className="stat-header">
-                    <h3 className="stat-count">15</h3>
-                  </div>
-                  <p className="stat-subtitle">Properties Viewed</p>
-                  <p className="stat-secondary">Last 30 days</p>
-                </div>
-              </div>
-
-              <div className="stat-card">
-                <div className="stat-icon-wrapper">💰</div>
-                <div className="stat-content">
-                  <div className="stat-header">
-                    <h3 className="stat-count">₹10.5K</h3>
-                    <span className="stat-trend down">3%</span>
-                  </div>
-                  <p className="stat-subtitle">Average Rent</p>
-                  <p className="stat-secondary">In your area</p>
-                </div>
-              </div>
-            </div>
-          </section>              {/* Quick Actions */}
+          {/* Quick Actions */}
               <section className="quick-actions">
                 <div className="section-header">
                   <h2>Quick Actions</h2>
@@ -438,7 +744,7 @@ const Dashboard = () => {
                   </button>
                   <button
                     className="view-all-btn"
-                    onClick={() => window.location.href = '/listings'}
+                    onClick={() => navigate('/hostels')}
                   >
                     <span className="icon">→</span>
                     View All Listings
@@ -448,83 +754,128 @@ const Dashboard = () => {
             </div>
 
             <div className={`hostels-${viewMode}`}>
-              {featuredHostels.map(hostel => (
-                <div key={hostel.id} className="hostel-card">
-                  <div 
-                    className="hostel-image-container"
-                    onClick={() => navigate(`/hostel/${hostel.id}`)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <img src={hostel.image} alt={hostel.name} className="hostel-image" />
-                    <div className={`hostel-label ${hostel.labelColor || ''}`}>{hostel.label}</div>
-                  </div>
-
-                  <div className="hostel-content">
-                    <div className="hostel-header">
-                      <div>
-                        <h4 
-                          onClick={() => navigate(`/hostel/${hostel.id}`)}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          {hostel.name}
-                        </h4>
-                        <div className="rating">
-                          <span className="stars">{'★'.repeat(Math.floor(hostel.rating))}{'☆'.repeat(5 - Math.floor(hostel.rating))}</span>
-                          <span>{hostel.rating}</span>
+              {featuredLoading ? (
+                <div className="featured-loading">
+                  <div className="loading-grid">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="hostel-card loading">
+                        <div className="hostel-image-skeleton"></div>
+                        <div className="hostel-content-skeleton">
+                          <div className="skeleton-line title"></div>
+                          <div className="skeleton-line rating"></div>
+                          <div className="skeleton-line detail"></div>
+                          <div className="skeleton-line detail"></div>
+                          <div className="skeleton-amenities">
+                            <div className="skeleton-amenity"></div>
+                            <div className="skeleton-amenity"></div>
+                            <div className="skeleton-amenity"></div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="hostel-details">
-                      <p className="hostel-distance">
-                        <span className="icon">📍</span>
-                        {hostel.distance}
-                      </p>
-                      <p className="hostel-price">
-                        <span className="icon">💰</span>
-                        {hostel.price}
-                      </p>
-                      <p className="availability">
-                        <span className="icon">✨</span>
-                        {hostel.availability}
-                      </p>
-                    </div>
-
-                    <div className="hostel-amenities">
-                      {hostel.amenities.map((amenity, index) => (
-                        <span key={index} className="amenity">
-                          <span className="amenity-icon">
-                            {amenity === 'Wi-Fi' && '📶'}
-                            {amenity === 'Food' && '🍽️'}
-                            {amenity === 'AC' && '❄️'}
-                            {amenity === 'Laundry' && '🧺'}
-                            {amenity === 'Gym' && '🏋️'}
-                            {amenity === 'Parking' && '🅿️'}
-                          </span>
-                          {amenity}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="hostel-actions">
-                      <button
-                        className="save-btn"
-                        onClick={() => handleHostelAction(hostel.id, 'save')}
-                      >
-                        <span className="icon">❤️</span>
-                        Save
-                      </button>
-                      <button
-                        className="view-btn"
-                        onClick={() => handleHostelAction(hostel.id, 'view')}
-                      >
-                        <span className="icon">👀</span>
-                        View Details
-                      </button>
-                    </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              ) : featuredHostels.length === 0 ? (
+                <div className="no-featured-hostels">
+                  <div className="no-data-message">
+                    <span className="icon">🏠</span>
+                    <h3>No featured properties available</h3>
+                    <p>We're working on adding more amazing properties for you!</p>
+                    <button
+                      className="browse-all-btn"
+                      onClick={() => navigate('/listings')}
+                    >
+                      Browse All Properties
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                featuredHostels.map(hostel => (
+                  <div key={hostel.id} className="hostel-card">
+                    <div 
+                      className="hostel-image-container"
+                      onClick={() => navigate(`/hostel/${hostel.id}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <img 
+                        src={hostel.image} 
+                        alt={hostel.name} 
+                        className="hostel-image"
+                        onError={(e) => {
+                          e.target.src = '/images/no-image.png';
+                        }}
+                      />
+                      <div className={`hostel-label ${hostel.labelColor || ''}`}>{hostel.label}</div>
+                    </div>
+
+                    <div className="hostel-content">
+                      <div className="hostel-header">
+                        <div>
+                          <h4 
+                            onClick={() => navigate(`/hostel/${hostel.id}`)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {hostel.name}
+                          </h4>
+                          <div className="rating">
+                            <span className="stars">{'★'.repeat(Math.floor(hostel.rating))}{'☆'.repeat(5 - Math.floor(hostel.rating))}</span>
+                            <span>{hostel.rating}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="hostel-details">
+                        <p className="hostel-distance">
+                          <span className="icon">📍</span>
+                          {hostel.distance}
+                        </p>
+                        <p className="hostel-price">
+                          <span className="icon">💰</span>
+                          {hostel.price}
+                        </p>
+                        <p className="availability">
+                          <span className="icon">✨</span>
+                          {hostel.availability}
+                        </p>
+                      </div>
+
+                      <div className="dashboard-hostel-amenities">
+                        {hostel.amenities.map((amenity, index) => (
+                          <span key={index} className="dashboard-amenity">
+                            <span className="dashboard-amenity-icon">
+                              {amenity === 'Wi-Fi' && '📶'}
+                              {amenity === 'Food' && '🍽️'}
+                              {amenity === 'AC' && '❄️'}
+                              {amenity === 'Laundry' && '🧺'}
+                              {amenity === 'Gym' && '🏋️'}
+                              {amenity === 'Parking' && '🅿️'}
+                              {!['Wi-Fi', 'Food', 'AC', 'Laundry', 'Gym', 'Parking'].includes(amenity) && '✨'}
+                            </span>
+                            {amenity}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="dashboard-hostel-actions">
+                        <button
+                          className="dashboard-save-btn"
+                          onClick={() => handleHostelAction(hostel.id, 'save')}
+                        >
+                          <span className="icon">❤️</span>
+                          Save
+                        </button>
+                        <button
+                          className="dashboard-view-btn"
+                          onClick={() => handleHostelAction(hostel.id, 'view')}
+                        >
+                          <span className="icon">👀</span>
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </section>
           

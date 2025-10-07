@@ -1,4 +1,4 @@
-const Owner = require("../models/owner.model");
+const Owner = require("../models/owner.model").default;
 const jwt = require("jsonwebtoken");
 
 const generateAccessAndRefreshToken = async (ownerId) => {

@@ -1,4 +1,3 @@
-
 import api from './api';
 
 const authService = {
@@ -26,7 +25,7 @@ const authService = {
   },
   getCurrentUser: async () => {
     try {
-      const response = await api.get('/auth/me');
+      const response = await api.get('/users/auth/me');
       return {
         success: true,
         data: response.data.data
@@ -38,7 +37,6 @@ const authService = {
       };
     }
   },
-
   updateProfile: async (userData) => {
     try {
       const response = await api.put('/users/profile', userData);
@@ -56,7 +54,7 @@ const authService = {
   // Register a new user
   register: async (userData) => {
     try {
-      const response = await api.post('/auth/register', userData);
+  const response = await api.post('/users/auth/register', userData);
       
       // Handle successful registration
       if (response.data && response.data.success) {
@@ -114,7 +112,7 @@ const authService = {
   // Login user
   login: async (credentials) => {
     try {
-      const response = await api.post('/auth/login', credentials);
+  const response = await api.post('/users/auth/login', credentials);
       
       if (response.data && response.data.success) {
         const { accessToken, refreshToken, user } = response.data.data;
@@ -164,7 +162,7 @@ const authService = {
   // Logout user
   logout: async () => {
     try {
-      await api.post('/auth/logout');
+  await api.post('/users/auth/logout');
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
     } catch (error) {
@@ -175,7 +173,7 @@ const authService = {
   // Get current user
   getCurrentUser: async () => {
     try {
-      const response = await api.get('/auth/me');
+      const response = await api.get('/users/auth/me');
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;

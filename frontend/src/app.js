@@ -17,6 +17,7 @@ import HostelDetail from './pages/HostelDetail';
 import OwnerDashboard from './pages/OwnerDashboard';
 import OwnerProfile from './pages/OwnerProfile';
 import OwnerListingManagement from './pages/OwnerListingManagement';
+import AddNewListing from './pages/AddNewListing';
 
 import './styles/global.css';
 
@@ -44,6 +45,7 @@ function App() {
           <Route path="/owner-dashboard" element={<OwnerDashboard />} />
           <Route path="/owner-profile" element={<OwnerProfile />} />
           <Route path="/owner-listings" element={<OwnerListingManagement />} />
+          <Route path="/add-listing" element={<AddNewListing />} />
           
 
           <Route path="/hostels" element={<ListingsPage />} />

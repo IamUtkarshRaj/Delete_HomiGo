@@ -166,7 +166,7 @@ const OwnerListingManagement = () => {
             <div className="header-actions">
               <button 
                 className="primary-btn"
-                onClick={() => alert('Add listing feature coming soon!')}
+                onClick={() => navigate('/add-listing')}
               >
                 ➕ Add New Listing
               </button>
@@ -262,7 +262,7 @@ const OwnerListingManagement = () => {
                   <h3>No listings found</h3>
                   <button 
                     className="primary-btn"
-                    onClick={() => alert('Add listing feature coming soon!')}
+                    onClick={() => navigate('/add-listing')}
                   >
                     Create Your First Listing
                   </button>

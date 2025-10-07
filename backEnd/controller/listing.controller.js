@@ -238,10 +238,30 @@ const deleteListing = async (req, res) => {
   }
 };
 
+// Get all listings (alias for getRooms)
+const getAllListings = async (req, res) => {
+  return getRooms(req, res);
+};
+
+// Get listing by ID (alias for getRoomDetails)
+const getListingById = async (req, res) => {
+  return getRoomDetails(req, res);
+};
+
+// Create listing (alias for createRoom)
+const createListing = async (req, res) => {
+  return createRoom(req, res);
+};
+
 module.exports = {
   getRooms,
   getRoomDetails,
   createRoom,
   updateRoom,
-  deleteRoom
+  deleteRoom,
+  getAllListings,
+  getListingById,
+  createListing,
+  updateListing,
+  deleteListing
 };

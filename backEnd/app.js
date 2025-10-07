@@ -15,6 +15,7 @@ const indexRouter = require('./routes/index');
 const usersRouter = require('./routes/users');
 const roomsRouter = require('./routes/rooms');
 const ownerRouter = require('./routes/owner');
+const listingRouter = require('./routes/listing');
 
 
 var app = express();
@@ -23,18 +24,18 @@ var app = express();
 app.use(cors({
   origin: function(origin, callback) {
     // allow requests with no origin (like mobile apps or curl requests)
-    if(!origin) return callback(null, true);
-    
+    if (!origin) return callback(null, true);
+
     const allowedOrigins = [
       'http://localhost:3001',
       'http://localhost:3000',
       'http://localhost:5173'
     ];
-    
-    if(allowedOrigins.indexOf(origin) === -1){
-      return callback(null, false);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, origin); // Set Access-Control-Allow-Origin to the request's origin
     }
-    return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -56,8 +57,9 @@ app.use(fileUpload({
 
 // Apply routes
 app.use('/', indexRouter);
-app.use('/api', usersRouter); // This will make auth routes available at /api/auth/*
+app.use('/api/users', usersRouter); // This will make GET /api/users available
 app.use('/api/rooms', roomsRouter);
 app.use('/api/owner', ownerRouter);
+app.use('/api/listings', listingRouter);
 
 module.exports = app;

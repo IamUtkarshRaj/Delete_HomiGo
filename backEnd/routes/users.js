@@ -1,5 +1,15 @@
 const express = require('express');
 const router = express.Router();
+// Get all users
+router.get('/', async (req, res) => {
+    const User = require('../models/user.models');
+    try {
+        const users = await User.find({});
+        res.json({ success: true, data: users });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Failed to fetch users' });
+    }
+});
 const { 
     registerUser,
     loginUser,

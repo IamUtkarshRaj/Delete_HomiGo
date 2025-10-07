@@ -1,88 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import MatchCard from './MatchCard';
-import FilterPanel from './FilterPanel';
-import Toast from './Toast';
-import '../styles/matches.css';
-import Sidebar from './Sidebar';
-import Footer from './Footer';
 
-const mockMatches = [
-  {
-    id: 1,
-    name: "Sarah",
-    age: 25,
-    gender: "female",
-    location: "Delhi, India",
-    course: "Software Engineering",
-    compatibility: 28,
-    budget: 8000,
-    lifestyle: "early_bird",
-    profileImage: "https://images.unsplash.com/photo-1494790108755-2616b612b647?w=400&h=400&fit=crop&crop=face",
-    verified: true,
-    interests: ["Coding", "Travel", "Music"],
-    isPerfectMatch: false
-  },
-  {
-    id: 2,
-    name: "Priya",
-    age: 24,
-    gender: "female",
-    location: "Mumbai, India",
-    course: "Computer Science",
-    compatibility: 85,
-    budget: 12000,
-    lifestyle: "night_owl",
-    profileImage: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face",
-    verified: true,
-    interests: ["Gaming", "Books", "Fitness"],
-    isPerfectMatch: false
-  },
-  {
-    id: 3,
-    name: "Ananya",
-    age: 22,
-    gender: "female",
-    location: "Bangalore, India",
-    course: "Data Science",
-    compatibility: 72,
-    budget: 7000,
-    lifestyle: "balanced",
-    profileImage: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=400&fit=crop&crop=face",
-    verified: false,
-    interests: ["Art", "Photography", "Coffee"],
-    isPerfectMatch: false
-  },
-  {
-    id: 4,
-    name: "Kavya",
-    age: 27,
-    gender: "female",
-    location: "Delhi, India",
-    course: "Business Administration",
-    compatibility: 91,
-    budget: 15000,
-    lifestyle: "social",
-    profileImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
-    verified: true,
-    interests: ["Yoga", "Cooking", "Networking"],
-    isPerfectMatch: true
-  },
-  {
-    id: 5,
-    name: "Shruti",
-    age: 23,
-    gender: "female",
-    location: "Pune, India",
-    course: "Marketing",
-    compatibility: 95,
-    budget: 10000,
-    lifestyle: "early_bird",
-    profileImage: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&h=400&fit=crop&crop=face",
-    verified: true,
-    interests: ["Dancing", "Movies", "Food"],
-    isPerfectMatch: true
-  }
-];
+import React, { useState, useEffect } from 'react';
+import Sidebar from '../components/Sidebar';
+import Footer from '../components/Footer';
+import MatchCard from '../components/MatchCard';
+import FilterPanel from '../components/FilterPanel';
+import Toast from '../components/Toast';
+import axios from 'axios';
+import '../styles/matches.css';
+
 
 const Matches = () => {
   const [allMatches, setAllMatches] = useState([]);
@@ -102,18 +27,68 @@ const Matches = () => {
     lifestyle: ""
   });
   
+  
   // Temporary filters state that only applies when clicking Apply
   const [tempFilters, setTempFilters] = useState(filters);
 
   useEffect(() => {
     const fetchMatches = async () => {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setAllMatches(mockMatches);
-      setFilteredMatches(mockMatches);
+      try {
+        const response = await axios.get('http://localhost:5001/api/users');
+        // Only keep users with role === 'student'
+        const students = response.data?.data?.filter(user => user.role === 'student') || [];
+        
+        // Get current user to exclude from matches
+        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const currentUserId = currentUser._id || currentUser.id;
+        
+        // Filter out current user from matches
+        const otherStudents = students.filter(user => user._id !== currentUserId);
+        
+        // Transform user data to match expected structure
+        const transformedStudents = otherStudents.map(user => {
+          // Generate deterministic values based on user ID for consistency
+          const userIdNum = parseInt(user._id.slice(-4), 16) || 1000;
+          const compatibility = 70 + (userIdNum % 30);
+          const interestCount = (userIdNum % 4) + 1;
+          const isPerfectMatch = (userIdNum % 10) > 6;
+          
+          return {
+            id: user._id,
+            _id: user._id,
+            name: user.fullname,
+            fullname: user.fullname,
+            username: user.username,
+            email: user.email,
+            phone: user.phone,
+            gender: user.gender,
+            college: user.college,
+            course: user.course,
+            year: user.year,
+            location: user.location,
+            profileImage: user.profilePicture || 'https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg?auto=compress&cs=tinysrgb&w=400&h=400&dpr=1',
+            profilePicture: user.profilePicture,
+            budget: user.budget?.max || user.budget?.min || 0,
+            budgetRange: user.budget,
+            preferences: user.preferences,
+            interests: ['Music', 'Movies', 'Sports', 'Reading'].slice(0, interestCount),
+            compatibility: compatibility,
+            verified: true,
+            isPerfectMatch: isPerfectMatch,
+            requestSent: false
+          };
+        });
+        
+        setAllMatches(transformedStudents);
+        setFilteredMatches(transformedStudents);
+      } catch (error) {
+        setToast({ message: 'Failed to fetch matches', type: 'error', isVisible: true });
+        setAllMatches([]);
+        setFilteredMatches([]);
+      }
       setLoading(false);
     };
-
     fetchMatches();
   }, []);
 
@@ -134,13 +109,13 @@ const Matches = () => {
 
   useEffect(() => {
     let filtered = allMatches.filter(match => {
-      const ageMatch = match.age >= filters.ageRange[0] && match.age <= filters.ageRange[1];
+      // Remove age filter since users don't have age field
       const budgetMatch = match.budget >= filters.budgetRange[0] && match.budget <= filters.budgetRange[1];
       const genderMatch = !filters.gender || match.gender === filters.gender;
       const locationMatch = !filters.location || match.location.toLowerCase().includes(filters.location.toLowerCase());
-      const lifestyleMatch = !filters.lifestyle || match.lifestyle === filters.lifestyle;
-
-      return ageMatch && budgetMatch && genderMatch && locationMatch && lifestyleMatch;
+      // Remove lifestyle filter for now since it's not in user data structure
+      
+      return budgetMatch && genderMatch && locationMatch;
     });
 
     setFilteredMatches(filtered);
@@ -203,6 +178,12 @@ const Matches = () => {
     );
 
     showToast(`Request to ${matchName} has been cancelled.`, 'info');
+  };
+
+  const handleMessage = (matchId, matchName) => {
+    console.log(`Opening message conversation with ${matchName} (ID: ${matchId})`);
+    showToast(`Opening conversation with ${matchName}...`, 'info');
+    // TODO: Navigate to messages page or open message modal
   };
 
   const handleReject = (matchId, matchName) => {
@@ -268,31 +249,13 @@ const Matches = () => {
 
             <div className="matches-main">
               <div className="section-header">
-                <h2>Personalized Matches</h2>
+                <h2>All Matches</h2>
                 <span className="arrow">→</span>
               </div>
 
-              {perfectMatches.length > 0 && (
-                <div className="perfect-matches-alert">
-                  <h3>🎉 {perfectMatches.length} Perfect Match{perfectMatches.length > 1 ? 'es' : ''} Found!</h3>
-                  <p>These roommates have high compatibility with your preferences. Send requests now!</p>
-                  <div className="perfect-matches-actions">
-                    {perfectMatches.slice(0, 2).map(match => (
-                      <button
-                        key={match.id}
-                        className="quick-request-btn"
-                        onClick={() => handleRequest(match.id, match.name)}
-                      >
-                        Request {match.name} ({match.compatibility}% match)
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <div className="matches-header">
                 <div className="matches-count">
-                  {filteredMatches.length} potential roommates found
+                  {filteredMatches.filter(match => !match.requestSent).length} potential roommates found
                 </div>
                 <button 
                   className="advanced-filter-btn"
@@ -321,10 +284,60 @@ const Matches = () => {
                 </div>
               )}
 
+              {/* Sent Requests Section */}
+              {allMatches.filter(match => match.requestSent).length > 0 && (
+                <>
+                  <div className="section-header">
+                    <h2>Sent Requests</h2>
+                    <span className="arrow">→</span>
+                  </div>
+                  <div className="sent-requests-grid">
+                    {allMatches.filter(match => match.requestSent).map(match => (
+                      <div key={match._id || match.id} className="sent-request-card">
+                        <div className="sent-request-profile">
+                          <img 
+                            src={match.profileImage} 
+                            alt={`${match.name}'s profile`}
+                            className="sent-request-avatar"
+                            onError={(e) => {
+                              e.target.src = 'https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg?auto=compress&cs=tinysrgb&w=400&h=400&dpr=1';
+                            }}
+                          />
+                          <div className="sent-request-info">
+                            <h4 className="sent-request-name">{match.name}</h4>
+                            <p className="sent-request-details">
+                              📍 {match.location} • 🎓 {match.course}
+                            </p>
+                            <div className="sent-request-status">
+                              <span className="status-indicator">✅ Request Sent</span>
+                              <span className="compatibility-small">{match.compatibility}% match</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="sent-request-actions">
+                          <button 
+                            className="message-btn"
+                            onClick={() => handleMessage(match.id, match.name)}
+                          >
+                            💬 Message
+                          </button>
+                          <button 
+                            className="cancel-sent-btn"
+                            onClick={() => handleCancelRequest(match.id, match.name)}
+                          >
+                            ✕ Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
               <div className="matches-grid">
-                {filteredMatches.map(match => (
+                {filteredMatches.filter(match => !match.requestSent).map(match => (
                   <MatchCard
-                    key={match.id}
+                    key={match._id || match.id}
                     match={match}
                     onRequest={handleRequest}
                     onReject={handleReject}
